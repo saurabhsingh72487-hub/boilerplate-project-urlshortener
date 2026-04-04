@@ -8,30 +8,50 @@ const mongoose = require("mongoose");
 const { URL } = require("url");
 
 const app = express();
-
 const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
-app.use("/public", express.static(`${process.cwd()}/public`));
+app.use("/public", express.static(path.join(process.cwd(), "public")));
 
 app.get("/", function (req, res) {
   res.sendFile(path.join(process.cwd(), "views", "index.html"));
 });
 
-mongoose.connect(process.env.MONGO_URI);
+if (!process.env.MONGO_URI) {
+  console.error("MONGO_URI is missing");
+  process.exit(1);
+}
+
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => {
+    console.error("MongoDB connection error:", err);
+    process.exit(1);
+  });
+
+const counterSchema = new mongoose.Schema({
+  _id: String,
+  seq: { type: Number, default: 0 }
+});
 
 const urlSchema = new mongoose.Schema({
   original_url: { type: String, required: true },
   short_url: { type: Number, required: true, unique: true }
 });
 
+const Counter = mongoose.model("Counter", counterSchema);
 const Url = mongoose.model("Url", urlSchema);
 
-async function getNextShortUrl() {
-  const lastEntry = await Url.findOne().sort({ short_url: -1 });
-  return lastEntry ? lastEntry.short_url + 1 : 1;
+async function getNextSequence() {
+ const counter = await Counter.findOneAndUpdate(
+  { _id: "url_seq" },
+  { $inc: { seq: 1 } },
+  { returnDocument: "after", upsert: true }
+);
+  return counter.seq;
 }
 
 app.post("/api/shorturl", async (req, res) => {
@@ -68,20 +88,19 @@ app.post("/api/shorturl", async (req, res) => {
         });
       }
 
-      const nextShortUrl = await getNextShortUrl();
+      const shortUrl = await getNextSequence();
 
-      const newUrl = new Url({
+      const newUrl = await Url.create({
         original_url: originalUrl,
-        short_url: nextShortUrl
+        short_url: shortUrl
       });
-
-      await newUrl.save();
 
       return res.json({
         original_url: newUrl.original_url,
         short_url: newUrl.short_url
       });
-    } catch {
+    } catch (err) {
+      console.error(err);
       return res.status(500).json({ error: "server error" });
     }
   });
@@ -102,7 +121,8 @@ app.get("/api/shorturl/:short_url", async (req, res) => {
     }
 
     return res.redirect(foundUrl.original_url);
-  } catch {
+  } catch (err) {
+    console.error(err);
     return res.status(500).json({ error: "server error" });
   }
 });
