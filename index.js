@@ -7,21 +7,17 @@ const path = require("path");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware
 app.use(cors());
 app.use(express.urlencoded({ extended: false }));
 app.use("/public", express.static(path.join(process.cwd(), "public")));
 
-// In-memory database
 const urlDatabase = [];
 let counter = 1;
 
-// Home route
 app.get("/", (req, res) => {
   res.sendFile(path.join(process.cwd(), "views", "index.html"));
 });
 
-// POST route
 app.post("/api/shorturl", (req, res) => {
   const originalUrl = req.body.url;
 
@@ -71,7 +67,6 @@ app.post("/api/shorturl", (req, res) => {
   });
 });
 
-// GET redirect route
 app.get("/api/shorturl/:short_url", (req, res) => {
   const shortUrl = Number(req.params.short_url);
 
