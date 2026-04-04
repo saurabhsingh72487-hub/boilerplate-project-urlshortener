@@ -47,10 +47,7 @@ app.post("/api/shorturl", (req, res) => {
     );
 
     if (existing) {
-      return res.json({
-        original_url: existing.original_url,
-        short_url: existing.short_url
-      });
+      return res.json(existing);
     }
 
     const newEntry = {
@@ -60,26 +57,22 @@ app.post("/api/shorturl", (req, res) => {
 
     urlDatabase.push(newEntry);
 
-    return res.json({
-      original_url: newEntry.original_url,
-      short_url: newEntry.short_url
-    });
+    return res.json(newEntry);
   });
 });
 
 app.get("/api/shorturl/:short_url", (req, res) => {
   const shortUrl = Number(req.params.short_url);
 
-  const entry = urlDatabase.find(e => e.short_url === shortUrl);
+  const entry = urlDatabase.find((item) => item.short_url === shortUrl);
 
   if (!entry) {
     return res.json({ error: "No short URL found for the given input" });
   }
 
-  res.status(302);
-  res.set("Location", entry.original_url);
-  return res.end();
+  return res.redirect(entry.original_url);
 });
+
 app.listen(port, () => {
   console.log(`Listening on port ${port}`);
 });
