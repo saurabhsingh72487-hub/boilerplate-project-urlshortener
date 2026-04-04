@@ -107,26 +107,27 @@ app.post("/api/shorturl", async (req, res) => {
 });
 
 app.get("/api/shorturl/:short_url", async (req, res) => {
-  const shortUrl = parseInt(req.params.short_url, 10);
-
-  if (isNaN(shortUrl)) {
-    return res.json({ error: "No short URL found for the given input" });
-  }
-
   try {
-    const foundUrl = await Url.findOne({ short_url: shortUrl });
-
-    if (!foundUrl) {
-      return res.json({ error: "No short URL found for the given input" });
+    const shortUrl = parseInt(req.params.short_url, 10);
+    
+    if (isNaN(shortUrl) || shortUrl <= 0) {
+      return res.status(400).json({ error: "No short URL found for the given input" });
     }
 
-    return res.redirect(foundUrl.original_url);
+    const foundUrl = await Url.findOne({ short_url: shortUrl });
+    
+    if (!foundUrl) {
+      return res.status(400).json({ error: "No short URL found for the given input" });
+    }
+
+   
+    res.redirect(301, foundUrl.original_url);
+    
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: "server error" });
+    res.status(500).json({ error: "server error" });
   }
 });
-
 app.listen(port, function () {
   console.log(`Listening on port ${port}`);
 });
