@@ -1,5 +1,4 @@
 require("dotenv").config();
-
 const express = require("express");
 const cors = require("cors");
 const dns = require("dns");
@@ -19,18 +18,9 @@ app.get("/", function (req, res) {
   res.sendFile(path.join(process.cwd(), "views", "index.html"));
 });
 
-if (!process.env.MONGO_URI) {
-  console.error("MONGO_URI is missing");
-  process.exit(1);
-}
-
-mongoose
-  .connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB connected"))
-  .catch((err) => {
-    console.error("MongoDB connection error:", err);
-    process.exit(1);
-  });
+  .catch((err) => console.error("MongoDB connection error:", err));
 
 const counterSchema = new mongoose.Schema({
   _id: String,
@@ -45,26 +35,25 @@ const urlSchema = new mongoose.Schema({
 const Counter = mongoose.model("Counter", counterSchema);
 const Url = mongoose.model("Url", urlSchema);
 
-async function getNextSequence() {
- const counter = await Counter.findOneAndUpdate(
-  { _id: "url_seq" },
-  { $inc: { seq: 1 } },
-  { returnDocument: "after", upsert: true }
-);
+async function getNextSequence(name) {
+  const counter = await Counter.findOneAndUpdate(
+    { _id: name }, 
+    { $inc: { seq: 1 } }, 
+    { new: true, upsert: true }
+  );
   return counter.seq;
 }
 
 app.post("/api/shorturl", async (req, res) => {
-  const originalUrl = req.body.url;
-
-  if (!originalUrl) {
+  const inputUrl = req.body.url;
+  
+  if (!inputUrl) {
     return res.json({ error: "invalid url" });
   }
 
   let parsedUrl;
-
   try {
-    parsedUrl = new URL(originalUrl);
+    parsedUrl = new URL(inputUrl);
   } catch {
     return res.json({ error: "invalid url" });
   }
@@ -79,55 +68,48 @@ app.post("/api/shorturl", async (req, res) => {
     }
 
     try {
-      const existing = await Url.findOne({ original_url: originalUrl });
-
-      if (existing) {
-        return res.json({
-          original_url: existing.original_url,
-          short_url: existing.short_url
-        });
+      let urlDoc = await Url.findOne({ original_url: inputUrl });
+      
+      if (urlDoc) {
+        return res.json({ original_url: urlDoc.original_url, short_url: urlDoc.short_url });
       }
 
-      const shortUrl = await getNextSequence();
-
-      const newUrl = await Url.create({
-        original_url: originalUrl,
-        short_url: shortUrl
+      const shortId = await getNextSequence("url_count");
+      urlDoc = new Url({
+        original_url: inputUrl,
+        short_url: shortId
       });
-
-      return res.json({
-        original_url: newUrl.original_url,
-        short_url: newUrl.short_url
-      });
+      await urlDoc.save();
+      
+      res.json({ original_url: urlDoc.original_url, short_url: urlDoc.short_url });
+      
     } catch (err) {
       console.error(err);
-      return res.status(500).json({ error: "server error" });
+      res.status(500).json({ error: "server error" });
     }
   });
 });
 
-app.get("/api/shorturl/:short_url", async (req, res) => {
+
+app.get('/api/shorturl/:short_url', async function(req, res) {
   try {
-    const shortUrl = parseInt(req.params.short_url, 10);
+    const shortid = parseInt(req.params.short_url);
     
-    if (isNaN(shortUrl) || shortUrl <= 0) {
-      return res.status(400).json({ error: "No short URL found for the given input" });
-    }
-
-    const foundUrl = await Url.findOne({ short_url: shortUrl });
+    const urlDoc = await Url.findOne({short_url: shortid});
     
-    if (!foundUrl) {
-      return res.status(400).json({ error: "No short URL found for the given input" });
+    if (!urlDoc) {
+      res.json({ error: 'No short URL found in the database' });
+      return;
     }
-
-   
-    res.redirect(301, foundUrl.original_url);
+    
+    res.redirect(301, urlDoc.original_url);
     
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "server error" });
+    console.error('Database error:', err);
+    res.status(500).send('Database error');
   }
 });
+
 app.listen(port, function () {
   console.log(`Listening on port ${port}`);
 });
