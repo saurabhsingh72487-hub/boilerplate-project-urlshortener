@@ -1,24 +1,40 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const dns = require("dns");
-const { URL } = require("url");
 const path = require("path");
+const mongoose = require("mongoose");
+const { URL } = require("url");
 
 const app = express();
+
 const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.urlencoded({ extended: false }));
-app.use("/public", express.static(path.join(process.cwd(), "public")));
+app.use(express.json());
+app.use("/public", express.static(`${process.cwd()}/public`));
 
-const urlDatabase = [];
-let counter = 1;
-
-app.get("/", (req, res) => {
+app.get("/", function (req, res) {
   res.sendFile(path.join(process.cwd(), "views", "index.html"));
 });
 
-app.post("/api/shorturl", (req, res) => {
+mongoose.connect(process.env.MONGO_URI);
+
+const urlSchema = new mongoose.Schema({
+  original_url: { type: String, required: true },
+  short_url: { type: Number, required: true, unique: true }
+});
+
+const Url = mongoose.model("Url", urlSchema);
+
+async function getNextShortUrl() {
+  const lastEntry = await Url.findOne().sort({ short_url: -1 });
+  return lastEntry ? lastEntry.short_url + 1 : 1;
+}
+
+app.post("/api/shorturl", async (req, res) => {
   const originalUrl = req.body.url;
 
   if (!originalUrl) {
@@ -29,7 +45,7 @@ app.post("/api/shorturl", (req, res) => {
 
   try {
     parsedUrl = new URL(originalUrl);
-  } catch (err) {
+  } catch {
     return res.json({ error: "invalid url" });
   }
 
@@ -37,42 +53,60 @@ app.post("/api/shorturl", (req, res) => {
     return res.json({ error: "invalid url" });
   }
 
-  dns.lookup(parsedUrl.hostname, (err) => {
+  dns.lookup(parsedUrl.hostname, async (err) => {
     if (err) {
       return res.json({ error: "invalid url" });
     }
 
-    const existing = urlDatabase.find(
-      (item) => item.original_url === originalUrl
-    );
+    try {
+      const existing = await Url.findOne({ original_url: originalUrl });
 
-    if (existing) {
-      return res.json(existing);
+      if (existing) {
+        return res.json({
+          original_url: existing.original_url,
+          short_url: existing.short_url
+        });
+      }
+
+      const nextShortUrl = await getNextShortUrl();
+
+      const newUrl = new Url({
+        original_url: originalUrl,
+        short_url: nextShortUrl
+      });
+
+      await newUrl.save();
+
+      return res.json({
+        original_url: newUrl.original_url,
+        short_url: newUrl.short_url
+      });
+    } catch {
+      return res.status(500).json({ error: "server error" });
     }
-
-    const newEntry = {
-      original_url: originalUrl,
-      short_url: counter++
-    };
-
-    urlDatabase.push(newEntry);
-
-    return res.json(newEntry);
   });
 });
 
-app.get("/api/shorturl/:short_url", (req, res) => {
-  const shortUrl = Number(req.params.short_url);
+app.get("/api/shorturl/:short_url", async (req, res) => {
+  const shortUrl = parseInt(req.params.short_url, 10);
 
-  const entry = urlDatabase.find((item) => item.short_url === shortUrl);
-
-  if (!entry) {
+  if (isNaN(shortUrl)) {
     return res.json({ error: "No short URL found for the given input" });
   }
 
-  return res.redirect(entry.original_url);
+  try {
+    const foundUrl = await Url.findOne({ short_url: shortUrl });
+
+    if (!foundUrl) {
+      return res.json({ error: "No short URL found for the given input" });
+    }
+
+    return res.redirect(foundUrl.original_url);
+  } catch {
+    return res.status(500).json({ error: "server error" });
+  }
 });
 
-app.listen(port, () => {
+app.listen(port, function () {
   console.log(`Listening on port ${port}`);
 });

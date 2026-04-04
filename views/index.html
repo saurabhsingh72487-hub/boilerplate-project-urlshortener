@@ -1,33 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>URL Shortener Microservice</title>
-    <link rel="stylesheet" href="/public/style.css" />
   </head>
   <body>
-    <main class="container">
-      <h1>URL Shortener Microservice</h1>
-      <p>Enter a valid URL to shorten it.</p>
-
-      <form action="/api/shorturl" method="post">
-        <input
-          type="text"
-          name="url"
-          placeholder="https://www.example.com"
-          required
-        />
-        <button type="submit">Shorten URL</button>
-      </form>
-
-      <div class="example">
-        <h3>Example POST usage</h3>
-        <code>/api/shorturl</code>
-
-        <h3>Example input</h3>
-        <code>https://www.freecodecamp.org</code>
-      </div>
-    </main>
+    <h1>URL Shortener Microservice</h1>
+    <form action="/api/shorturl" method="post">
+      <input type="text" name="url" placeholder="https://example.com" />
+      <button type="submit">POST URL</button>
+    </form>
   </body>
 </html>
